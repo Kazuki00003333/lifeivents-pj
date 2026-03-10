@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Card } from '@/components/common/Card';
 import { colors, spacing, borderRadius } from '@/lib/constants/colors';
+import { TAB_BAR_AREA_HEIGHT } from '@/lib/constants/layout';
 import { mockEvents } from '@/lib/services/mockData';
 
 export default function CalendarScreen() {
@@ -242,7 +243,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxl * 2,
+    paddingBottom: TAB_BAR_AREA_HEIGHT,
   },
   calendarContainer: {
     backgroundColor: colors.surface,

@@ -17,6 +17,7 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <Text style={styles.logo}>LifePath</Text>
+      <Text style={styles.tagline}>人生の節目を、ひとつずつ。</Text>
       <ActivityIndicator size="large" color={colors.accent} style={styles.spinner} />
     </View>
   );
@@ -30,12 +31,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   logo: {
-    fontSize: 48,
+    fontSize: 42,
     fontWeight: '700',
     color: colors.text.primary,
-    marginBottom: spacing.xl,
+    letterSpacing: -0.5,
+  },
+  tagline: {
+    fontSize: 15,
+    color: colors.text.secondary,
+    marginTop: spacing.sm,
+    letterSpacing: 1,
   },
   spinner: {
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
 });

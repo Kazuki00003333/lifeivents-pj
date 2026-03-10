@@ -8,13 +8,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button } from '@/components/common/Button';
 import { colors, spacing, borderRadius } from '@/lib/constants/colors';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,11 @@ export default function LoginScreen() {
 
       if (signInError) throw signInError;
 
-      router.replace('/(tabs)/home');
+      if (redirect && typeof redirect === 'string') {
+        router.replace(redirect as any);
+      } else {
+        router.replace('/(tabs)/home');
+      }
     } catch (err: any) {
       setError(err.message || 'ログインに失敗しました');
     } finally {
@@ -62,7 +67,11 @@ export default function LoginScreen() {
 
       if (signUpError) throw signUpError;
 
-      router.replace('/(tabs)/home');
+      if (redirect && typeof redirect === 'string') {
+        router.replace(redirect as any);
+      } else {
+        router.replace('/(tabs)/home');
+      }
     } catch (err: any) {
       setError(err.message || '登録に失敗しました');
     } finally {

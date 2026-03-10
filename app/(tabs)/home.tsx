@@ -5,11 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   SafeAreaView,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
-import { colors, spacing, borderRadius } from '@/lib/constants/colors';
+import { colors, spacing, borderRadius, shadows } from '@/lib/constants/colors';
+import { TAB_BAR_AREA_HEIGHT } from '@/lib/constants/layout';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -100,6 +102,13 @@ export default function HomeScreen() {
     </View>
   );
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'おはようございます';
+    if (hour < 18) return 'こんにちは';
+    return 'おかえりなさい';
+  };
+
   const sortedTasksByDueDate = [...mockTasks].sort((a, b) => {
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   });
@@ -116,13 +125,18 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.greeting}>おかえりなさい</Text>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
           {mockEvents.length > 0 && (
-            <View style={styles.mainEventBadge}>
-              <Text style={styles.mainEventText}>
-                {mockEvents[0].name}まであと {getDaysUntil(mockEvents[0].date)} 日
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.mainEventCard}
+              onPress={() => router.push(`/event/${mockEvents[0].id}`)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.mainEventCardAccent, { backgroundColor: mockEvents[0].color }]} />
+              <Text style={styles.mainEventCardLabel}>次のイベント</Text>
+              <Text style={styles.mainEventCardName}>{mockEvents[0].name}</Text>
+              <Text style={styles.mainEventCardDays}>あと {getDaysUntil(mockEvents[0].date)} 日</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -178,27 +192,48 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing.xxl * 2,
+    paddingBottom: TAB_BAR_AREA_HEIGHT,
   },
   header: {
     padding: spacing.lg,
     paddingTop: spacing.md,
   },
   greeting: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
     color: colors.text.primary,
     marginBottom: spacing.md,
   },
-  mainEventBadge: {
-    backgroundColor: colors.accent + '20',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.md,
-    alignSelf: 'flex-start',
+  mainEventCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    position: 'relative',
+    overflow: 'hidden',
+    ...shadows.md,
   },
-  mainEventText: {
-    fontSize: 14,
+  mainEventCardAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+  },
+  mainEventCardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text.tertiary,
+    marginBottom: spacing.xs,
+    letterSpacing: 0.5,
+  },
+  mainEventCardName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  mainEventCardDays: {
+    fontSize: 15,
     fontWeight: '600',
     color: colors.accent,
   },
@@ -279,7 +314,7 @@ const styles = StyleSheet.create({
   },
   progressBarContainer: {
     height: 8,
-    backgroundColor: colors.border,
+    backgroundColor: colors.border.light,
     borderRadius: borderRadius.sm,
     overflow: 'hidden',
   },

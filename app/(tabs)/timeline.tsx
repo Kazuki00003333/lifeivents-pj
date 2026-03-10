@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { User, Users, Calendar, List, ChevronDown, Plus, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon } from 'lucide-react-native';
 import { colors, spacing, borderRadius } from '@/lib/constants/colors';
+import { TAB_BAR_AREA_HEIGHT } from '@/lib/constants/layout';
 import { Card } from '@/components/common/Card';
 import { mockEvents } from '@/lib/services/mockData';
 
@@ -23,7 +24,7 @@ type ViewMode = 'vertical' | 'horizontal';
 export default function TimelineScreen() {
   const router = useRouter();
   const [selectedYearTab, setSelectedYearTab] = useState('すべて');
-  const [viewMode, setViewMode] = useState<ViewMode>('horizontal');
+  const [viewMode, setViewMode] = useState<ViewMode>('vertical');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedPersonIndex, setSelectedPersonIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -487,7 +488,7 @@ const styles = StyleSheet.create({
   },
   verticalContent: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxl * 2,
+    paddingBottom: TAB_BAR_AREA_HEIGHT,
   },
   yearSection: {
     marginBottom: spacing.xl,
@@ -602,7 +603,7 @@ const styles = StyleSheet.create({
   },
   columnsContainer: {
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xxl * 2,
+    paddingBottom: TAB_BAR_AREA_HEIGHT,
   },
   personColumn: {
     width: COLUMN_WIDTH,
@@ -766,7 +767,7 @@ const styles = StyleSheet.create({
   },
   singlePersonContent: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxl * 2,
+    paddingBottom: TAB_BAR_AREA_HEIGHT,
   },
   singlePersonEventItem: {
     marginBottom: spacing.lg,

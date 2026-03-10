@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,13 @@ import {
   TouchableOpacity,
   Linking,
 } from 'react-native';
-import { ChevronRight, ShoppingBag, Church, Gift } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { ChevronRight, ShoppingBag, Church, Gift, FileText, Bell } from 'lucide-react-native';
+import { Alert } from 'react-native';
+import { registerPushToken } from '@/lib/services/pushNotifications';
 import { Card } from '@/components/common/Card';
 import { colors, spacing, borderRadius } from '@/lib/constants/colors';
+import { TAB_BAR_AREA_HEIGHT } from '@/lib/constants/layout';
 
 const ceremonialServices = [
   {
@@ -58,6 +62,16 @@ const ceremonialServices = [
 ];
 
 export default function ExternalServicesScreen() {
+  const router = useRouter();
+  const [remindLoading, setRemindLoading] = useState(false);
+
+  const handleRemindOn = async () => {
+    setRemindLoading(true);
+    const res = await registerPushToken();
+    setRemindLoading(false);
+    Alert.alert(res.ok ? '完了' : '通知設定', res.message);
+  };
+
   const handleServicePress = (url: string) => {
     Linking.openURL(url).catch((err) => console.error('URLを開けませんでした:', err));
   };
@@ -158,6 +172,27 @@ export default function ExternalServicesScreen() {
           </Text>
         </View>
 
+        <TouchableOpacity
+          style={styles.logsRow}
+          onPress={handleRemindOn}
+          disabled={remindLoading}
+        >
+          <Bell size={20} color={colors.text.secondary} />
+          <Text style={styles.logsLabel}>
+            {remindLoading ? '登録中…' : 'リマインド通知をオンにする'}
+          </Text>
+          <ChevronRight size={18} color={colors.text.tertiary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.logsRow}
+          onPress={() => router.push('/logs')}
+        >
+          <FileText size={20} color={colors.text.secondary} />
+          <Text style={styles.logsLabel}>ログを表示・取得</Text>
+          <ChevronRight size={18} color={colors.text.tertiary} />
+        </TouchableOpacity>
+
         <Text style={styles.version}>LifePath v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
@@ -190,7 +225,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxl * 2,
+    paddingBottom: TAB_BAR_AREA_HEIGHT,
   },
   section: {
     marginBottom: spacing.xl,
@@ -259,6 +294,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
     lineHeight: 20,
+  },
+  logsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  logsLabel: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text.primary,
   },
   version: {
     fontSize: 12,

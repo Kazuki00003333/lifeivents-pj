@@ -23,7 +23,10 @@ export const colors = {
     inverse: '#FFFFFF',
   },
 
-  border: '#E5E7EB',
+  border: {
+    light: '#E5E7EB',
+    medium: '#D1D5DB',
+  },
 
   status: {
     success: '#10B981',

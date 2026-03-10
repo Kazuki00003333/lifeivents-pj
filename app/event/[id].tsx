@@ -7,16 +7,22 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, CheckSquare, Square, Plus, UserPlus } from 'lucide-react-native';
+import { ArrowLeft, CheckSquare, Square, Plus, UserPlus, Share2, Sparkles, MessageCircle, Camera, ShoppingBag, ChevronRight } from 'lucide-react-native';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { colors, spacing, borderRadius } from '@/lib/constants/colors';
+import { MIN_TOUCH_TARGET } from '@/lib/constants/layout';
 import { eventService } from '@/lib/services/eventService';
 import { GuestList, AddGuestModal } from '@/components/event/GuestManagement';
 import { ExpenseList, AddExpenseModal } from '@/components/event/MoneyManagement';
 import { TaskAssignmentModal, AssignmentBadge } from '@/components/event/TaskAssignment';
+import { AISuggestModal } from '@/components/event/AISuggestModal';
+import { suggestTasks, getAIUsage } from '@/lib/api/ai';
+import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import { mockEvents, mockTasks, mockGuests, mockExpenses } from '@/lib/services/mockData';
 
 type TabType = 'overview' | 'tasks' | 'guests' | 'money' | 'notes';
@@ -34,6 +40,11 @@ export default function EventDetailScreen() {
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<any>(null);
+  const [showAISuggestModal, setShowAISuggestModal] = useState(false);
+  const [aiSuggestLoading, setAiSuggestLoading] = useState(false);
+  const [aiSuggestError, setAiSuggestError] = useState<string | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<{ title: string; description?: string; phase?: string; due_date?: string }[]>([]);
+  const [aiUsage, setAiUsage] = useState<{ used: number; limit: number } | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -57,6 +68,7 @@ export default function EventDetailScreen() {
 
       const eventData = await eventService.getEvent(id as string);
       setEvent(eventData);
+      logger.info('イベント詳細を表示', { eventId: id, eventName: eventData?.name });
 
       const [tasksData, guestsData, expensesData] = await Promise.all([
         eventService.getEventTasks(id as string),
@@ -105,6 +117,73 @@ export default function EventDetailScreen() {
     setShowAssignmentModal(true);
   };
 
+  const openAISuggest = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setAiSuggestError('AI機能を使うにはログインしてください。');
+      setAiSuggestions([]);
+      setShowAISuggestModal(true);
+      return;
+    }
+    setShowAISuggestModal(true);
+    setAiSuggestError(null);
+    setAiSuggestions([]);
+    setAiSuggestLoading(true);
+    const usage = await getAIUsage(session.access_token);
+    if (usage) setAiUsage({ used: usage.used, limit: usage.limit });
+
+    const eventName = event?.name ?? '';
+    const eventType = event?.event_type ?? event?.type;
+    const eventDate = event?.event_date ?? event?.date;
+    const res = await suggestTasks(session.access_token, {
+      eventId: id as string,
+      eventName,
+      eventType,
+      eventDate: eventDate ? new Date(eventDate).toISOString().slice(0, 10) : undefined,
+    });
+
+    setAiSuggestLoading(false);
+    if (res.ok) {
+      logger.info('AIタスク提案を取得', { eventId: id, count: res.suggestions.length });
+      setAiSuggestions(res.suggestions);
+      if (usage) setAiUsage({ used: res.used, limit: res.limit });
+    } else {
+      if (res.reason === 'daily_limit_reached') {
+        setAiSuggestError(`本日のAI利用上限（${res.limit}回）に達しました。明日またお試しください。`);
+      } else if (res.reason === 'invalid_token' || res.reason === 'missing_token') {
+        setAiSuggestError('ログインの有効期限が切れました。再度ログインしてください。');
+      } else {
+        setAiSuggestError(res.error ?? 'タスクの取得に失敗しました。');
+      }
+    }
+  };
+
+  const handleAddAITasks = async (tasksToAdd: { title: string; description?: string; phase?: string; due_date?: string }[]) => {
+    if (!id || tasksToAdd.length === 0) return;
+    const mockEvent = mockEvents.find((e) => e.id === id);
+    if (mockEvent) {
+      const newTasks = tasksToAdd.map((t, i) => ({
+        id: `ai-${Date.now()}-${i}`,
+        title: t.title,
+        description: t.description ?? null,
+        phase: t.phase ?? 'その他',
+        due_date: t.due_date ?? null,
+        is_completed: false,
+        assigned_to: null,
+      }));
+      setTasks((prev) => [...prev, ...newTasks]);
+      setShowAISuggestModal(false);
+      return;
+    }
+    try {
+      await eventService.createTasks(id as string, tasksToAdd);
+      fetchEventData();
+      setShowAISuggestModal(false);
+    } catch (e) {
+      setAiSuggestError(e instanceof Error ? e.message : 'タスクの追加に失敗しました。');
+    }
+  };
+
   const getDaysUntil = () => {
     if (!event?.event_date) return 0;
     const eventDate = new Date(event.event_date);
@@ -112,6 +191,33 @@ export default function EventDetailScreen() {
     const diffTime = eventDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
+  };
+
+  const getContextualServices = (): { id: string; title: string; url: string; Icon: typeof Camera }[] => {
+    const name = (event?.name ?? '') + (event?.event_type ?? '');
+    const base = 'https://example.com';
+    if (/七五三|七五三の/.test(name)) {
+      return [
+        { id: 'photo', title: '写真館を探す', url: `${base}/photo-studio`, Icon: Camera },
+        { id: 'kimono', title: 'レンタル衣装を探す', url: `${base}/kimono-rental`, Icon: ShoppingBag },
+      ];
+    }
+    if (/結婚|ウェディング|式/.test(name)) {
+      return [
+        { id: 'venue', title: '式場を探す', url: `${base}/wedding-venue`, Icon: Camera },
+        { id: 'dress', title: 'ドレス・衣装を探す', url: `${base}/dress-rental`, Icon: ShoppingBag },
+      ];
+    }
+    if (/葬儀|葬式|お葬式/.test(name)) {
+      return [
+        { id: 'mourning', title: '喪服レンタル', url: `${base}/mourning-wear`, Icon: ShoppingBag },
+        { id: 'hall', title: '葬儀場を探す', url: `${base}/funeral-hall`, Icon: Camera },
+      ];
+    }
+    return [
+      { id: 'photo', title: '写真館を探す', url: `${base}/photo-studio`, Icon: Camera },
+      { id: 'rental', title: '衣装レンタルを探す', url: `${base}/rental`, Icon: ShoppingBag },
+    ];
   };
 
   const getTaskStats = () => {
@@ -173,6 +279,12 @@ export default function EventDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={colors.text.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push(`/event/${id}/share`)}
+          style={styles.shareButton}
+        >
+          <Share2 size={22} color={colors.accent} />
         </TouchableOpacity>
       </View>
 
@@ -294,11 +406,54 @@ export default function EventDetailScreen() {
                 </Text>
               </View>
             </Card>
+
+            <TouchableOpacity
+              style={styles.shareCtaCard}
+              onPress={() => router.push(`/event/${id}/share`)}
+            >
+              <MessageCircle size={24} color={colors.accent} />
+              <View style={styles.shareCtaText}>
+                <Text style={styles.shareCtaTitle}>家族・パートナーと共有</Text>
+                <Text style={styles.shareCtaSubtitle}>URLをポチッと送るだけで、LINEで共有できます</Text>
+              </View>
+              <ChevronRight size={20} color={colors.text.tertiary} />
+            </TouchableOpacity>
+
+            <View style={styles.contextualCtaSection}>
+              <Text style={styles.contextualCtaTitle}>このイベントに役立つサービス</Text>
+              <View style={styles.contextualCtaRow}>
+                {getContextualServices().map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={styles.contextualCtaButton}
+                    onPress={() => s.url && Linking.openURL(s.url)}
+                  >
+                    <s.Icon size={20} color={colors.accent} />
+                    <Text style={styles.contextualCtaLabel}>{s.title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
         )}
 
         {selectedTab === 'tasks' && (
           <View style={styles.tabContent}>
+            <View style={styles.contextualCtaSection}>
+              <Text style={styles.contextualCtaTitle}>このイベントに役立つサービス</Text>
+              <View style={styles.contextualCtaRow}>
+                {getContextualServices().map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={styles.contextualCtaButton}
+                    onPress={() => s.url && Linking.openURL(s.url)}
+                  >
+                    <s.Icon size={20} color={colors.accent} />
+                    <Text style={styles.contextualCtaLabel}>{s.title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
             {Object.keys(groupedTasks).length === 0 ? (
               <Card padding="lg">
                 <Text style={styles.emptyText}>タスクがありません</Text>
@@ -360,6 +515,15 @@ export default function EventDetailScreen() {
                 </View>
               ))
             )}
+            <TouchableOpacity style={styles.aiSuggestButton} onPress={openAISuggest}>
+              <Sparkles size={20} color={colors.accent} />
+              <Text style={styles.aiSuggestButtonText}>AIでタスクを提案</Text>
+              {aiUsage != null && (
+                <Text style={styles.aiSuggestUsage}>
+                  本日あと{Math.max(0, aiUsage.limit - aiUsage.used)}回
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
@@ -471,6 +635,19 @@ export default function EventDetailScreen() {
         guests={guests}
         currentAssignee={selectedTaskForAssignment?.assigned_to}
       />
+
+      <AISuggestModal
+        visible={showAISuggestModal}
+        onClose={() => {
+          setShowAISuggestModal(false);
+          setAiSuggestError(null);
+          setAiSuggestions([]);
+        }}
+        loading={aiSuggestLoading}
+        error={aiSuggestError}
+        suggestions={aiSuggestions}
+        onAddTasks={handleAddAITasks}
+      />
     </SafeAreaView>
   );
 }
@@ -483,6 +660,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
@@ -490,6 +668,17 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: spacing.sm,
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shareButton: {
+    padding: spacing.sm,
+    minWidth: MIN_TOUCH_TARGET,
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   eventHeader: {
     padding: spacing.lg,
@@ -750,6 +939,58 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
   },
+  shareCtaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    backgroundColor: colors.accent + '12',
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.accent + '30',
+    gap: spacing.md,
+  },
+  shareCtaText: { flex: 1 },
+  shareCtaTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  shareCtaSubtitle: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  contextualCtaSection: {
+    marginTop: spacing.lg,
+  },
+  contextualCtaTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text.secondary,
+    marginBottom: spacing.sm,
+  },
+  contextualCtaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  contextualCtaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  contextualCtaLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.accent,
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -758,6 +999,29 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: borderRadius.md,
     marginTop: spacing.sm,
+  },
+  aiSuggestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    backgroundColor: colors.accent + '18',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.accent + '40',
+    minHeight: MIN_TOUCH_TARGET,
+  },
+  aiSuggestButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.accent,
+  },
+  aiSuggestUsage: {
+    fontSize: 12,
+    color: colors.text.tertiary,
   },
   addButtonText: {
     fontSize: 16,
